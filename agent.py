@@ -3,8 +3,13 @@ Hyper parameters:
     - Relevance values
     - epsilon for exploration
     - min_relevance
-        
+    - The calculations here: 
+        for action in node.results['actions']:
+            for number_choice, reward in node.results['actions'][action].items():
+                current_actions['actions'][action][number_choice] += (reward * relevance * node.happiness) / learning_rate
+
 Would a longer decision path result in a better action?
+Incorporate the advantage each side has in relevance calculations. So just sum up the totals of both side's pieces and take the difference.
 Not sure how you would prune the graph for something like this. It doesn't necessarily make sense to forget about states
 entirely and it also doesn't really make sense to try and make average nodes either. 
 """
@@ -49,8 +54,15 @@ class Node:
         }
         return node_json
     
+def get_current_game():
+    data = open(f"{CURRENT_DIR}/agent_stats.json", "r")
+    game_data = json.load(data)
+    game_number = game_data["Current Game"]
+    data.close()
+    return game_number
+
 def record_results(agent_won):
-    data = open(f"{CURRENT_DIR}/random_stats.json", "r")
+    data = open(f"{CURRENT_DIR}/agent_stats.json", "r")
     game_data = json.load(data)
     game_number = game_data["Current Game"]
     game_data["Games"].append({
@@ -61,8 +73,33 @@ def record_results(agent_won):
     game_data["Current Game"] += 1
     data.close()
 
-    with open(f"{CURRENT_DIR}/random_stats.json", "w") as fh:
+    with open(f"{CURRENT_DIR}/agent_stats.json", "w") as fh:
         json.dump(game_data, fh) 
+
+def store_graph(graph):
+    node_list = []
+    for node in graph:
+        node_list.append(node.jsonify())
+
+    with open(f"{CURRENT_DIR}/memory_graph.json", "w") as json_file: 
+        json.dump({"Size": len(node_list), "Nodes": node_list}, json_file)
+
+    print('saved graph')
+
+def load_graph():
+    with open(f"{CURRENT_DIR}/memory_graph.json", "r") as json_file: 
+        data = json.load(json_file)
+        graph = []
+        for node in data["Nodes"]:
+            node_object = Node(node['features'])
+            node_object.happiness = node['happiness']
+            node_object.results = node['results']
+            graph.append(node_object)
+
+    size = data["Size"]
+    json_file.close()    
+
+    return graph, size
 
 def move_to_tuple(move_uci):
     move = chess.Move.from_uci(move_uci)
@@ -176,128 +213,145 @@ def calculate_relevance(node1, node2):
     
     return relevance
 
-def find_most_relevant_node(graph, node):
+def find_most_relevant_nodes(graph, node, min_relevance, max_decision_path_length=100):
     """
-    Loops over the graph and finds the most relevant node.
-    Returns the most relevant node and its relevance value.
+    Loops over the graph and finds the n most relevant nodes.
+    Returns the list of relevant nodes.
     """
-    max_relevance = float('-inf')
-    most_relevant_node = None
+
+    # old version returning the single most relevant node
+    # max_relevance = float('-inf')
+    # most_relevant_node = None
+
+    # for other_node in graph:
+    #     relevance_value = calculate_relevance(node, other_node)
+    #     if relevance_value > max_relevance:
+    #         max_relevance = relevance_value
+    #         most_relevant_node = other_node
+    # if most_relevant_node is None:
+    #     return False
+    
+    # return {most_relevant_node: max_relevance}
+
+    # new version returning a list
+    relevant_nodes = []
 
     for other_node in graph:
         relevance_value = calculate_relevance(node, other_node)
-        if relevance_value > max_relevance:
-            max_relevance = relevance_value
-            most_relevant_node = other_node
-    if most_relevant_node is None:
+        if relevance_value > min_relevance:
+            relevant_nodes.append((other_node, relevance_value))
+            if len(relevant_nodes) >= max_decision_path_length:
+                break
+
+    if not relevant_nodes:
         return False
+
+    # Sort the nodes by relevance value in descending order
+    relevant_nodes.sort(key=lambda x: x[1], reverse=True)
     
-    return {most_relevant_node: max_relevance}
+    return relevant_nodes
 
-# initial things that remain constant throughout
-graph = []
-graph_size = 0
-min_relevance = 50
-learning_rate = 0.1
+def train(save_interval=25, min_relevance=50, learning_rate=0.1, duration=1000):
+    # initial things that remain constant throughout
+    graph, graph_size = load_graph()
+    current_game = get_current_game()
 
-for i in range(9000):
-    # Every game
-    board = chess.Board()
-    random_num = random.choice([0, 1])
-    if random_num == 1:
-        agent_color = chess.WHITE
-        agent_turn = True
-    else:
-        agent_color = chess.BLACK
-        agent_turn = False
-    
-    game_nodes = []
-    current_actions = {
-        'actions':
-            {
-                'start_x': {},
-                'start_y' : {},
-                'end_x': {},
-                'end_y': {}
-            }
-    }
-
-    for action in current_actions['actions']:
-        for i in range(8):
-            current_actions['actions'][action].update({i: 0})
-
-    while not board.is_game_over():
-        if agent_turn:
-            # # Every turn
-            # graph_size += 1
-            # feature_dict = extract_features(board, agent_color)
-            # initial_node = Node(features=feature_dict)
-            # decision_path = []
-            # # traverse the graph
-            # result = find_most_relevant_node(graph, initial_node)
-
-            # if result: # a node above the minimum relevance was found
-            #     current_node = next(iter(result))
-            #     relevance = next(iter(result.values()))
-
-            #     while relevance > min_relevance and current_node not in decision_path: 
-            #         decision_path.append(result)
-            #         result = find_most_relevant_node(graph, current_node) # potentially modify to be a list of nodes instead
-            #         current_node = next(iter(result))
-            #         relevance = next(iter(result.values()))
-            #         if any(current_node in node for node in decision_path): # don't loop
-            #             break
-
-            # # update current actions
-            # for result in decision_path:
-            #     node = next(iter(result))
-            #     relevance = next(iter(result.values()))
-            #     print(f'relevance: {relevance}')
-            #     for action in node.results['actions']:
-            #         for number_choice, reward in node.results['actions'][action].items():
-            #             current_actions['actions'][action][number_choice] += (reward * relevance * node.happiness) / learning_rate
-
-            # from_x, from_y, to_x, to_y = get_action(current_actions, graph_size)
-            
-            # # do action and update the rewards
-            # reward = perform_move(board, from_x, from_y, to_x, to_y)
-            # current_actions['actions']['start_x'][from_x] += reward
-            # current_actions['actions']['start_y'][from_y] += reward
-            # current_actions['actions']['end_x'][to_x] += reward
-            # current_actions['actions']['end_y'][to_y] += reward
-
-            # initial_node.results = current_actions
-            # game_nodes.append(initial_node) # Potential issue here since I want to continually add to the graph for the decision making
-            # agent_turn = not agent_turn # alternate turns
-            do_random_move(board)
-            agent_turn = not agent_turn
-
-        else: # not the agent's turn so just do a random move
-            do_random_move(board)
-            agent_turn = not agent_turn
-
-    # game over logic here
-    outcome = board.outcome()
-    if outcome:
-        winner = outcome.winner
-        # Check if the game is a draw
-        if outcome.termination in [chess.Termination.STALEMATE, chess.Termination.INSUFFICIENT_MATERIAL, chess.Termination.THREEFOLD_REPETITION, chess.Termination.FIFTY_MOVES]:
-            happiness_update = 0
-            print('draw')
-            record_results("Draw")
-        # Check for win condition
-        elif (winner == chess.WHITE and agent_color == chess.WHITE) or (winner == chess.BLACK and agent_color == chess.BLACK):
-            happiness_update = 1
-            print('agent won')
-            record_results("Win")
-        # Anything else is a loss
+    while current_game < duration:
+        # Every game
+        current_game += 1
+        print(f'Game: {current_game}')
+        board = chess.Board()
+        random_num = random.choice([0, 1])
+        if random_num == 1:
+            agent_color = chess.WHITE
+            agent_turn = True
         else:
-            happiness_update = -1
-            print('agent lost')
-            record_results("Loss")
+            agent_color = chess.BLACK
+            agent_turn = False
+        
+        game_nodes = []
 
-    for node in game_nodes:
-        print('adding node')
-        node.happiness += happiness_update
-        graph.append(node)
-    
+        current_actions = {
+            'actions': {
+                        'start_x': {i: 0 for i in range(8)},
+                        'start_y': {i: 0 for i in range(8)},
+                        'end_x': {i: 0 for i in range(8)},
+                        'end_y': {i: 0 for i in range(8)}
+                        }
+            }
+
+        while not board.is_game_over():
+            if agent_turn:
+                # Every turn
+                graph_size += 1
+                feature_dict = extract_features(board, agent_color)
+                initial_node = Node(features=feature_dict)
+                decision_path = find_most_relevant_nodes(graph, initial_node, min_relevance)
+
+                # old verison 
+                # if result: # a node above the minimum relevance was found
+                #     current_node = next(iter(result))
+                #     relevance = next(iter(result.values()))
+
+                #     while relevance > min_relevance and current_node not in decision_path: 
+                #         decision_path.append(result)
+                #         result = find_most_relevant_node(graph, current_node) # potentially modify to be a list of nodes instead
+                #         current_node = next(iter(result))
+                #         relevance = next(iter(result.values()))
+                #         if any(current_node in node for node in decision_path): # don't loop
+                #             break
+
+                # update current actions
+                if decision_path:
+                    for result in decision_path:
+                        node = result[0]
+                        relevance = result[1]
+                        for action in node.results['actions']:
+                            for number_choice, reward in node.results['actions'][action].items():
+                                current_actions['actions'][action][int(number_choice)] += (reward * relevance * node.happiness) / learning_rate
+
+                from_x, from_y, to_x, to_y = get_action(current_actions, graph_size)
+                
+                # do action and update the rewards
+                reward = perform_move(board, from_x, from_y, to_x, to_y)
+                current_actions['actions']['start_x'][from_x] += reward
+                current_actions['actions']['start_y'][from_y] += reward
+                current_actions['actions']['end_x'][to_x] += reward
+                current_actions['actions']['end_y'][to_y] += reward
+
+                initial_node.results = current_actions
+                game_nodes.append(initial_node) # Potential issue here since I want to continually add to the graph for the decision making
+                agent_turn = not agent_turn # alternate turns
+
+            else: # not the agent's turn so just do a random move
+                do_random_move(board)
+                agent_turn = not agent_turn
+
+        # game over logic here
+        outcome = board.outcome()
+        if outcome:
+            winner = outcome.winner
+            # Check if the game is a draw
+            if outcome.termination in [chess.Termination.STALEMATE, chess.Termination.INSUFFICIENT_MATERIAL, chess.Termination.THREEFOLD_REPETITION, chess.Termination.FIFTY_MOVES]:
+                happiness_update = 0
+                record_results("Draw")
+            # Check for win condition
+            elif (winner == chess.WHITE and agent_color == chess.WHITE) or (winner == chess.BLACK and agent_color == chess.BLACK):
+                happiness_update = 1
+                record_results("Win")
+            # Anything else is a loss
+            else:
+                happiness_update = -1
+                record_results("Loss")
+
+        for node in game_nodes:
+            node.happiness += happiness_update
+            graph.append(node)
+        
+        # save
+        if current_game % save_interval == 0:
+            store_graph(graph)
+
+    print('Training complete')
+
+train()

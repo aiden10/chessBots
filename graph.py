@@ -7,6 +7,7 @@ import pandas as pd
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 random_path = os.path.join(CURRENT_DIR, 'random_stats.json')
+agent_path = os.path.join(CURRENT_DIR, 'agent_stats.json')
 
 def plot_game_results(path):
     with open(path, "r") as file:
@@ -36,7 +37,7 @@ def plot_game_results(path):
     plt.plot(range(1, total_games + 1), draw_rates, label='Draw Rate', color='blue')
 
     # Customize the plot
-    plt.title('Chess Agent Performance: Random Moves (Control)')
+    plt.title('Chess Agent Performance')
     plt.xlabel('Number of Games Played')
     plt.ylabel('Rate')
     plt.grid(True, linestyle='--', alpha=0.7)
@@ -53,4 +54,5 @@ def plot_game_results(path):
 
     plt.tight_layout()
     plt.show()    
-plot_game_results(random_path)
+
+plot_game_results(agent_path)
