@@ -6,6 +6,8 @@ Provides an easy way to put chess bots against one another using PyQt and the [p
 ![chessfootage-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/22d53000-3d8f-4201-8daf-ba299b113392)
 
 ## Setup
+Run ```pip install requirements.txt```
+
 Create a class for your bot with the following properties:
 ```
 class chessBot:
@@ -29,9 +31,10 @@ bot1, bot2 = RandomBot(), BasicEvalBot()
 
 interface = Interface(bot1, bot2)
 interface.start_GUI()
-interface.play_games(10)
+# or interface.play_games(1000) (no visuals)
 ```
 
 ## Features
 - Recording played games as JSON files with moves in standard algebraic notation 
 - Playing large amounts of games with any two bots
+- Auto play
