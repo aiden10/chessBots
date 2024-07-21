@@ -1,5 +1,7 @@
-# Python Interface for chess bots
-Makes use of the [python-chess](https://github.com/niklasf/python-chess) library to handle the chess logic
+# Interface for chess bots
+
+## About
+Provides an easy way to put chess bots against one another using PyQt and the [python-chess](https://github.com/niklasf/python-chess) library to handle the chess logic.
 
 ![chessfootage-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/22d53000-3d8f-4201-8daf-ba299b113392)
 
@@ -18,15 +20,16 @@ class chessBot:
         # move calculation logic using the python-chess board
         return move
 ```
-And import into the class with the interface.
+Then import the bots and interface.
 ```
-from Bots.bots import RandomBot, HumanNotBot, BasicEvalBot
-app = QApplication([])
-bot1, bot2 = RandomBot(), BasicEvalBot()
-window = MainWindow(bot1, bot2)
+from Interface import Interface
+from Bots.bots import RandomBot, BasicEvalBot
 
-window.show()
-app.exec_()
+bot1, bot2 = RandomBot(), BasicEvalBot()
+
+interface = Interface(bot1, bot2)
+interface.start_GUI()
+interface.play_games(10)
 ```
 
 ## Features
