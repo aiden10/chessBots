@@ -156,6 +156,10 @@ class MainWindow(QWidget):
         self.display_board()
 
     def display_board(self):
+        """
+        Generates an svg of the board and displays it.
+        Should make this color the square of the piece which just moved.
+        """
         if self.board.is_check():
             # White in check
             if self.board.turn == chess.WHITE: 
@@ -215,11 +219,14 @@ class MainWindow(QWidget):
                 prompt_recording(self.moves, self.bot1, self.bot2)
 
 class Interface:
-    def __init__(self, bot1, bot2):
+    def __init__(self, bot1=None, bot2=None):
         self.bot1 = bot1
         self.bot2 = bot2
 
     def start_GUI(self):
+        if self.bot1 is None or self.bot2 is None:
+            raise Exception("The interface's bot1 and bot2 cannot be None")
+        
         app = QApplication([])
         window = MainWindow(self.bot1, self.bot2)
 

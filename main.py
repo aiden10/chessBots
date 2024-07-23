@@ -1,15 +1,10 @@
 from Interface import Interface
-from Bots.bots import RandomBot, BasicEvalBot
+from Bots.bots import *
 
-bot1, bot2 = RandomBot(), BasicEvalBot()
+bot1, bot2 = nMoveBasicEvalBot(2), BasicEvalBot()
 
-interface = Interface(bot1, bot2)
-# interface.start_GUI()
-# interface.play_games(100)
-bots = []
-for i in range(32):
-    new_bot = BasicEvalBot()
-    new_bot.name += str(i)
-    bots.append(new_bot)
+interface = Interface()
+interface.start_GUI()
 
-interface.run_knockout(bots)
+interface.play_games(100, bot1=RandomBot(), bot2=RandomBot())
+

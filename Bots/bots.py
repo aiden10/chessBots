@@ -125,9 +125,11 @@ class BasicEvalBot:
 class nMoveBasicEvalBot:
     """
     Bot which functions the same as the BasicEvalBot but this time looking n moves ahead.
+    Anything higher than 3 seems to take too long.
     """
     def __init__(self, foresight):
         self.name = f'{foresight}-Move B.E.B'
+        self.foresight = foresight
         self.side = None
         self.wins = 0
         self.losses = 0
@@ -155,18 +157,35 @@ class nMoveBasicEvalBot:
         
         return white_sum, black_sum
 
-    def get_move(self, board):
+    def explore_moves(self, board, current_depth=0):
         """
-        Needs to consider the move which causes the opponent's worst state as its best move rather than looking at the move
-        which causes its best state because your moves can only capture the enemy pieces. The downside to this is that it really means
-        that all it does is simply capture the most valuable piece if possible, otherwise it makes a random move.
+        Explores each possible move, then tries each of those possible moves up to a depth of n and evalutes the board
+        at that state. 
         """
+        if current_depth == self.foresight:
+            return self.evaluate(board)
+        
+        total_white_sum = 0
+        total_black_sum = 0
         legal_moves = list(board.legal_moves)
-        results = []
+        
         for move in legal_moves:
             temp_board = board.copy()
             temp_board.push(move)
-            white_sum, black_sum = self.evaluate(temp_board) # evaluate moves
+            white_sum, black_sum = self.explore_moves(temp_board, current_depth + 1)
+            total_white_sum += white_sum
+            total_black_sum += black_sum
+
+        avg_white_sum = total_white_sum / len(legal_moves)
+        avg_black_sum = total_black_sum / len(legal_moves)
+
+        return avg_white_sum, avg_black_sum
+
+    def get_move(self, board):
+        legal_moves = list(board.legal_moves)
+        results = []
+        for move in legal_moves:
+            white_sum, black_sum = self.explore_moves(board)
             result = {
                 "move": move,
                 "white_sum": white_sum,
