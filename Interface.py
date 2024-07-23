@@ -4,7 +4,8 @@ import random
 import json
 import datetime
 import os
-
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from PyQt5.QtSvg import QSvgWidget
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QLabel, QSizePolicy, QMessageBox, QCheckBox
 from PyQt5.QtCore import QByteArray, Qt, QTimer
@@ -225,54 +226,127 @@ class Interface:
         window.show()
         app.exec_()
 
-    def play_games(self, games):
+    def play_game(self, bot1=None, bot2=None):
         """
-        Break up the games into multiple threads
+        Plays a game with the bots which are passed in, otherwise uses the bots assigned to the interface.
+        Returns the winner of the game, else None if the game was a draw.
         """
-        for i in range(1, games+1):
-            print(f'Game {i}/{games}')
-            board = chess.Board()
-            if random.choice([0, 1]) == 1:
-                bot1_turn = True
-                self.bot1.side = chess.WHITE
-                self.bot2.side = chess.BLACK
+        if bot1 is None: bot1 = self.bot1
+        if bot2 is None: bot2 = self.bot2
+
+        board = chess.Board()
+        if random.choice([0, 1]) == 1:
+            bot1_turn = True
+            bot1.side = chess.WHITE
+            bot2.side = chess.BLACK
+        else:
+            bot1_turn = False
+            bot1.side = chess.BLACK
+            bot2.side = chess.WHITE
+
+        while not board.is_game_over():
+            if bot1_turn:
+                move = bot1.get_move(board)
             else:
-                bot1_turn = False
-                self.bot1.side = chess.BLACK
-                self.bot2.side = chess.WHITE
+                move = bot2.get_move(board)
 
-            while not board.is_game_over():
-                if bot1_turn:
-                    move = self.bot1.get_move(board)
-                else:
-                    move = self.bot2.get_move(board)
+            board.push(move)
+            bot1_turn = not bot1_turn
 
-                board.push(move)
-                bot1_turn = not bot1_turn
+        outcome = board.outcome()
+        if outcome:
+            winner = outcome.winner
 
-            outcome = board.outcome()
-            if outcome:
-                winner = outcome.winner
+            # game is a draw
+            if outcome.termination in [chess.Termination.STALEMATE, chess.Termination.INSUFFICIENT_MATERIAL, chess.Termination.THREEFOLD_REPETITION, chess.Termination.FIFTY_MOVES]:
+                bot1.draws += 1
+                bot2.draws += 1
+                return None
+            
+            # bot1 wins
+            elif (winner == chess.WHITE and self.bot1.side == chess.WHITE) or (winner == chess.BLACK and self.bot1.side == chess.BLACK):
+                bot1.wins += 1
+                bot2.losses += 1
+                return bot1
+            
+            # bot2 wins
+            else:
+                bot1.losses += 1
+                bot2.wins += 1
+                return bot2
 
-                # game is a draw
-                if outcome.termination in [chess.Termination.STALEMATE, chess.Termination.INSUFFICIENT_MATERIAL, chess.Termination.THREEFOLD_REPETITION, chess.Termination.FIFTY_MOVES]:
-                    self.bot1.draws += 1
-                    self.bot2.draws += 1
+    def play_games(self, games, bot1=None, bot2=None):
+        if bot1 is None: bot1 = self.bot1
+        if bot2 is None: bot2 = self.bot2
+        
+        print_lock = threading.Lock()
+        game_counter = 0
 
-                # bot1 wins
-                elif (winner == chess.WHITE and self.bot1.side == chess.WHITE) or (winner == chess.BLACK and self.bot1.side == chess.BLACK):
-                    self.bot1.wins += 1
-                    self.bot2.losses += 1
+        def play_single_game():
+            nonlocal game_counter
+            self.play_game(bot1, bot2)
+            with print_lock:
+                nonlocal game_counter
+                game_counter += 1
+                print(f"Game {game_counter} completed")
 
-                # bot2 wins
-                else:
-                    self.bot1.losses += 1
-                    self.bot2.wins += 1
-
-        print('\nGames completed\n')
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(play_single_game) for _ in range(games)]
+            
+            # Wait for all games to complete
+            for future in as_completed(futures):
+                future.result()
+        
+        print('\nAll games completed\n')
         print('Game Stats:')
-        print(f'Draw %: {(self.bot1.draws/games) * 100}%')
-        print(f'{self.bot1.name} winrate: {self.bot1.wins/games}%')
-        print(f'{self.bot2.name} winrate: {self.bot2.wins/games}%')
+        print(f'Draw %: {(round(self.bot1.draws/games, 2)) * 100}%')
+        print(f'{self.bot1.name} winrate: {(self.bot1.wins/games) * 100}%')
+        print(f'{self.bot2.name} winrate: {(self.bot2.wins/games) * 100}%')
         print(f'{self.bot1.name} # of wins: {self.bot1.wins}')
         print(f'{self.bot2.name} # of wins: {self.bot2.wins}')
+
+    def run_knockout(self, bots):
+        round_number = 1
+        placements = []
+        while len(bots) > 1:
+            print(f"Round {round_number}:")
+            next_round_bots = []
+            while len(bots) > 1:
+                bot1 = bots.pop(random.randint(0, len(bots) - 1))
+                bot2 = bots.pop(random.randint(0, len(bots) - 1))
+                print(f"Match: {bot1.name} vs {bot2.name}")
+                winner = self.play_game(bot1, bot2)
+                if winner is None:
+                    print("Draw: Starting new match...\n")
+                    bots.extend([bot1, bot2])  # Add both bots back to replay the match
+                else:
+                    print(f"Winner: {winner.name}")
+                    next_round_bots.append(winner)
+
+                    # Loser placement
+                    if winner == bot1:
+                        print(f"{bot2.name} has been eliminated\n")
+                        placements.append((bot2.name, len(placements) + 1))
+                    else:
+                        print(f"{bot1.name} has been eliminated\n")
+                        placements.append((bot1.name, len(placements) + 1))
+                    
+            # If there is an odd number of bots, one bot advances automatically
+            if len(bots) == 1:
+                advancing_bot = bots.pop()
+                print(f"{advancing_bot.name} advances automatically\n")
+                next_round_bots.append(advancing_bot)
+
+            bots = next_round_bots
+            round_number += 1
+
+        # The last remaining bot is the winner
+        if bots:
+            print(f"Champion: {bots[0].name}")
+            placements.append((bots[0].name, len(placements) + 1))
+
+        print("Final Placements:")
+        placement = len(placements)
+        for name, _ in sorted(placements, key=lambda x: x[1]):
+            print(f"{placement}: {name}")
+            placement -= 1
